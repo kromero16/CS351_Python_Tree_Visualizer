@@ -1,7 +1,3 @@
-# This is a sample Python script.
-
-# Press ⌃R to execute it or replace it with your code.
-# Press Double ⇧ to search everywhere for classes, files, tool windows, actions, and settings.
 from tkinter import *
 import re
 
@@ -154,6 +150,12 @@ class GUI:
         self.root = root
         self.root.title("Lexical Analyzer for TinyPie")
 
+        # Configure the grid layout
+        self.root.grid_rowconfigure(1, weight=1)
+        self.root.grid_columnconfigure(0, weight=1)
+        self.root.grid_columnconfigure(1, weight=1)
+        self.root.grid_columnconfigure(2, weight=1)
+
         #source code for input
         self.source_label = Label(self.root, text="Source Code Input:")
         self.source_label.grid(row=0, column=0)
@@ -163,15 +165,15 @@ class GUI:
 
         #process current line
         self.current_line_label = Label(self.root, text="Current Processing Line:")
-        self.current_line_label.grid(row=2, column=0)
+        self.current_line_label.grid(row=4, column=0, sticky=W, padx=(10, 2)) #move current processing line to the bottom
 
         self.current_line_value = StringVar(value="0")
         self.current_line_entry = Entry(self.root, state='readonly', textvariable=self.current_line_value, width=5)
-        self.current_line_entry.grid(row=3, column=0)
+        self.current_line_entry.grid(row=4, column=1, sticky=W, padx=(2, 10)) #Move current processing line to the bottom
 
         #button for next line
         self.button_next_line = Button(self.root, text="Next Line", command=self.output_next_line)
-        self.button_next_line.grid(row=4, column=0, pady=10)
+        self.button_next_line.grid(row=5, column=0, padx=(10, 5), pady=10, sticky=W) #move button to bottom
 
         #lexical analyzer result
         self.lexical_result_label = Label(self.root, text="Lexical Analyzed Result:")
@@ -185,9 +187,16 @@ class GUI:
         self.parseTreeOutput = Text(self.root, width=40, height=10, font=("Times", 14))
         self.parseTreeOutput.grid(row=1, column=2, sticky=E, padx=30)
 
+        #Adding new tree visualization text box and label
+        self.tree_visualization_label = Label(self.root, text="Tree Visualization:")
+        self.tree_visualization_label.grid(row=2, column=0, columnspan=3, sticky=W)
+
+        self.tree_visualization_output = Text(self.root, height=10, width=80)
+        self.tree_visualization_output.grid(row=3, column=0, columnspan=3, padx=10, pady=10, sticky='nsew')
+
         #Quit button
         self.quit_button = Button(self.root, text="Quit", command=self.root.quit)
-        self.quit_button.grid(row=4, column=2, padx=30)
+        self.quit_button.grid(row=5, column=2, padx=(5, 10), pady=10, sticky=E)
 
         self.line_count = 0
 
@@ -264,8 +273,7 @@ class GUI:
             else:
                 print("Error, missing identifier in comparison expression.")
                 return
-#test
-        #testing
+
         def if_exp():
             self.parseTreeOutput.insert("end", "\n----parent node if_exp, finding children nodes:" + "\n")
             global inToken
@@ -443,6 +451,9 @@ class GUI:
 if __name__ == '__main__':
     root = Tk()
 
+    root.grid_rowconfigure(3, weight=1)  # Make new Tree Visualization box expandable
+    root.grid_columnconfigure(1, weight=1)
+
     # enlarge window when user enlarges
     root.grid_rowconfigure(1, weight=1)
     root.grid_rowconfigure(0, weight=1)
@@ -451,4 +462,3 @@ if __name__ == '__main__':
     lexer_gui = GUI(root)
     root.mainloop()
 
-# See PyCharm help at https://www.jetbrains.com/help/pycharm/
