@@ -1,6 +1,11 @@
 from tkinter import *
 import re
 
+from treelib import Tree
+import pydot
+from PIL import Image, ImageTk
+import os
+
 def CutOneLineTokens(input_line):
     #our completed string to build after processing our rules will be held here
     formatted_tokens = []
@@ -200,6 +205,13 @@ class GUI:
 
         self.line_count = 0
 
+        # Creation of a the tree portion starter
+        self.numberFloat = 0
+        self.numberInteger = 0
+        self.countMulti = 0
+        self.myTree = Tree()
+
+
     def output_next_line(self):
         #remove previous tag line
         if self.line_count >0:
@@ -227,43 +239,83 @@ class GUI:
         # Insert parse tree header to parseTreeOutput Text widget
         self.parseTreeOutput.insert('end', "####Parse Tree Line " + str(self.line_count) + "####\n")
 
+        # Initialize the root node of the parse tree
+        if not self.myTree.contains('root'):
+            self.myTree.create_node("Root", "root")
+
         # Calling parser method
         token_data = list(zip(token_types, token_values))
         print("Tokens after lexing line {}: {}".format(self.line_count, token_data))
-        self.parser(token_data)
+        self.parser(token_data, 'root')
 
         # Highlight the current line in the source_text Text widget
         self.source_text.tag_add("highlight", f"{self.line_count}.0", f"{self.line_count}.end")
         self.source_text.tag_config("highlight", font=('TkDefaultFont', 10, 'bold'))
 
-    def parser(self, Mytokens):
+        # Generate a Graphviz dot file from the tree
+        self.myTree.to_graphviz("graph.dot", shape='box', sorting=False)
+        (graph,) = pydot.graph_from_dot_file('graph.dot')
+        graph.write_jpg('graph.jpg')
+
+        # Resize the image and convert
+        self.graphImageIntial = Image.open("graph.jpg")
+        self.graphImageIntial = self.graphImageIntial.resize((700, 300))
+        self.ImageGraph = ImageTk.PhotoImage(self.graphImageIntial)
+
+        # Display the image in the Tree Visualization GUI box
+        if hasattr(self, 'imgLabel'):
+            self.imgLabel.configure(image=self.ImageGraph)
+        else:
+            self.imgLabel = Label(self.tree_visualization_output, image=self.ImageGraph)
+            self.imgLabel.image = self.ImageGraph  # Keep a reference
+            self.imgLabel.pack()
+
+        # Clean up temporary files
+        os.remove("graph.jpg")
+        os.remove("graph.dot")
+
+        self.myTree = Tree()
+
+    identify_inputToken = ("empty", "empty")
+
+    def parser(self, Mytokens, parent_id):
         if not Mytokens:
             return
+
+        # Initialize the root node of the parse tree
+        if not self.myTree.contains('root'):
+            self.myTree.create_node("Root", "root")
+
         global inToken
         inToken = ("empty", "empty")
         inToken = Mytokens.pop(0)
 
-        def accept_token():
+        def accept_token(self, parent_id):
             global inToken
             self.parseTreeOutput.insert("end", "     accept token from the list:" + inToken[1] + "\n")
+
+            # Add token to the parse tree
+            token_node_id = parent_id + "_token_" + inToken[1]
+            self.myTree.create_node("Token: " + inToken[1], token_node_id, parent=parent_id)
+
             if (Mytokens):
                 inToken = Mytokens.pop(0)
 
-        def comparison_exp():
+        def comparison_exp(self, parent_id):
             self.parseTreeOutput.insert("end", "\n----parent node comparison_exp, finding children nodes:\n")
             global inToken
             if (inToken[0] == "identifier"):
                 self.parseTreeOutput.insert("end", "child node (internal): identifier" + "\n")
                 self.parseTreeOutput.insert("end", "   identifier has child node (token):" + inToken[1] + "\n")
-                accept_token()
+                accept_token(self)
                 if (inToken[1] == ">"):
                     self.parseTreeOutput.insert("end", "child node (internal): seperator" + "\n")
                     self.parseTreeOutput.insert("end", "   seperator has child node (token):" + inToken[1] + "\n")
-                    accept_token()
+                    accept_token(self)
                     if (inToken[0] == "identifier"):
                         self.parseTreeOutput.insert("end", "child node (internal): identifier" + "\n")
                         self.parseTreeOutput.insert("end", "   identifier has child node (token):" + inToken[1] + "\n")
-                        accept_token()
+                        accept_token(self)
                     else:
                         print("Error, missing identifier in comparison expression.")
                         return
@@ -274,26 +326,26 @@ class GUI:
                 print("Error, missing identifier in comparison expression.")
                 return
 
-        def if_exp():
+        def if_exp(self, parent_id):
             self.parseTreeOutput.insert("end", "\n----parent node if_exp, finding children nodes:" + "\n")
             global inToken
             if (inToken[1] == "if"):
                 self.parseTreeOutput.insert("end", "child node (internal): keyword" + "\n")
                 self.parseTreeOutput.insert("end", "   keyword has child node (token):" + inToken[1] + "\n")
-                accept_token()
+                accept_token(self, parent_id)
                 if (inToken[1] == "("):
                     self.parseTreeOutput.insert("end", "child node (internal): seperator" + "\n")
                     self.parseTreeOutput.insert("end", "   separator has child node (token):" + inToken[1] + "\n")
-                    accept_token()
+                    accept_token(self, parent_id)
                     if (inToken[0] == "identifier"):
-                        comparison_exp()
+                        comparison_exp(self, parent_id)
                         if (inToken[1] == ")"):
                             self.parseTreeOutput.insert("end",
                                                         "\n----parent node if_exp, finding children nodes:" + "\n")
                             self.parseTreeOutput.insert("end", "child node (internal): seperator" + "\n")
                             self.parseTreeOutput.insert("end",
                                                         "   separator has child node (token):" + inToken[1] + "\n")
-                            accept_token()
+                            accept_token(self, parent_id)
                             if (inToken[1] == ":"):
                                 self.parseTreeOutput.insert("end", "child node (internal): seperator" + "\n")
                                 self.parseTreeOutput.insert("end",
@@ -315,38 +367,38 @@ class GUI:
                 print("Error, missing \'if\' as first expression.")
                 return
 
-        def multi():
+        def multi(self, parent_id):
             self.parseTreeOutput.insert("end", "\n----parent node multi, finding children nodes:" + "\n")
             global inToken
             if (inToken[0] == "Int_literal"):
                 self.parseTreeOutput.insert("end", "child node (internal): int" + "\n")
                 self.parseTreeOutput.insert("end", "   int has child node (token):" + inToken[1] + "\n")
-                accept_token()
+                accept_token(self, parent_id)
                 if (inToken[1] == "*"):
                     self.parseTreeOutput.insert("end", "child node (token):" + inToken[1] + "\n")
-                    accept_token()
+                    accept_token(self, parent_id)
                     self.parseTreeOutput.insert("end", "child node (internal): multi" + "\n")
-                    multi()
+                    multi(self, parent_id)
             elif (inToken[0] == "Float_literal"):
                 self.parseTreeOutput.insert("end", "child node (internal): float" + "\n")
                 self.parseTreeOutput.insert("end", "   float has child node (token):" + inToken[1] + "\n")
-                accept_token()
+                accept_token(self, parent_id)
             else:
                 print("Error, invalid syntax.")
                 return
 
-        def math():
+        def math(self, parent_id):
             self.parseTreeOutput.insert("end", "\n----parent node math, finding children nodes:" + "\n")
             global inToken
             if (inToken[0] == "Float_literal" or inToken[0] == "Int_literal"):
                 self.parseTreeOutput.insert("end", "child node (internal): multi" + "\n")
-                multi()
+                multi(self, parent_id)
                 if (inToken[1] == "+"):
                     self.parseTreeOutput.insert("end", "\n----parent node math, finding children nodes:" + "\n")
                     self.parseTreeOutput.insert("end", "child node (internal):+" + "\n")
-                    accept_token()
+                    accept_token(self, parent_id)
                     self.parseTreeOutput.insert("end", "child node (internal): multi" + "\n")
-                    multi()
+                    multi(self, parent_id)
                 else:
                     print("Error, invalid syntax.")
                     return
@@ -354,67 +406,67 @@ class GUI:
                 print("Error, invalid syntax.")
                 return
 
-        def exp():
+        def exp(self, parent_id):
             global inToken
             self.parseTreeOutput.insert("end", "\n----parent node key_exp, finding children nodes:" + "\n")
             self.parseTreeOutput.insert("end", "child node (internal): keyword" + "\n")
             self.parseTreeOutput.insert("end", "  Keyword has child node(token):" + inToken[1] + "\n")
-            accept_token()
+            accept_token(self, parent_id)
             self.parseTreeOutput.insert("end", "\n----parent node exp, finding children nodes:" + "\n")
             if (inToken[0] == "identifier"):
                 self.parseTreeOutput.insert("end", "child node (internal): identifier" + "\n")
                 self.parseTreeOutput.insert("end", "   identifier has child node (token):" + inToken[1] + "\n")
-                accept_token()
+                accept_token(self, parent_id)
             else:
                 print("expect identifier as the second element of the expression!\n")
                 return
             if (inToken[1] == "="):
                 self.parseTreeOutput.insert("end", "child node (token):" + inToken[1] + "\n")
-                accept_token()
+                accept_token(self, parent_id)
             else:
                 print("expect = as the third element of the expression!")
                 return
             self.parseTreeOutput.insert("end", "Child node (internal): math" + "\n")
-            math()
+            math(self, parent_id)
             if (inToken[1] == ";"):
                 self.parseTreeOutput.insert("end", "\n----parent node key_exp, finding children nodes:" + "\n")
                 self.parseTreeOutput.insert("end", "child node (internal): seperator" + "\n")
                 self.parseTreeOutput.insert("end", "   seperator has child node (token):" + inToken[1] + "\n")
-                accept_token()
+                accept_token(self, parent_id)
 
-        def print_exp():
+        def print_exp(self, parent_id):
             global inToken
             self.parseTreeOutput.insert("end", "\n----parent node print_exp, finding children nodes:" + "\n")
             self.parseTreeOutput.insert("end", "child node (internal): keyword" + "\n")
             self.parseTreeOutput.insert("end", "   keyword has child node (token):" + inToken[1] + "\n")
-            accept_token()
+            accept_token(self, parent_id)
             if (inToken[1] == "("):
                 self.parseTreeOutput.insert("end", "child node (internal): seperator" + "\n")
                 self.parseTreeOutput.insert("end", "   separator has child node (token):" + inToken[1] + "\n")
-                accept_token()
+                accept_token(self, parent_id)
                 if (inToken[1] in ["“", "\""]):
                     self.parseTreeOutput.insert("end", "child node (internal): seperator" + "\n")
                     self.parseTreeOutput.insert("end", "   separator has child node (token):" + inToken[1] + "\n")
-                    accept_token()
+                    accept_token(self, parent_id)
                     if (inToken[0] == "String_literal"):
                         self.parseTreeOutput.insert("end", "child node (internal): String" + "\n")
                         self.parseTreeOutput.insert("end", "   String has child node (token):" + inToken[1] + "\n")
-                        accept_token()
+                        accept_token(self, parent_id)
                         if (inToken[1] in ["”", "\""]):
                             self.parseTreeOutput.insert("end", "child node (internal): seperator" + "\n")
                             self.parseTreeOutput.insert("end",
                                                         "   separator has child node (token):" + inToken[1] + "\n")
-                            accept_token()
+                            accept_token(self, parent_id)
                             if (inToken[1] == ")"):
                                 self.parseTreeOutput.insert("end", "child node (internal): seperator" + "\n")
                                 self.parseTreeOutput.insert("end",
                                                             "   separator has child node (token):" + inToken[1] + "\n")
-                                accept_token()
+                                accept_token(self, parent_id)
                                 if (inToken[1] == ";"):
                                     self.parseTreeOutput.insert("end", "child node (internal): seperator" + "\n")
                                     self.parseTreeOutput.insert("end", "   separator has child node (token):" + inToken[
                                         1] + "\n")
-                                    accept_token()
+                                    accept_token(self, parent_id)
 
                                 else:
                                     print("Error, missing \';\' as seventh expression.")
@@ -437,11 +489,11 @@ class GUI:
 
         if (inToken[0] == "keyword"):
             if (inToken[1] == "float"):
-                exp()
+                exp(self, parent_id)
             elif (inToken[1] == "if"):
-                if_exp()
+                if_exp(self, parent_id)
             elif (inToken[1] == "print"):
-                print_exp()
+                print_exp(self)
             else:
                 print("Error, invalid syntax.")
         else:
@@ -461,4 +513,3 @@ if __name__ == '__main__':
 
     lexer_gui = GUI(root)
     root.mainloop()
-
